@@ -10,6 +10,20 @@ import numpy as np
 import torch
 
 
+def setup_chinese_font():
+    """Windows 下 matplotlib 默认字体不含中文，标题会显示成方块，这里换成系统中文字体。"""
+    from matplotlib import font_manager
+
+    for name in ["Microsoft YaHei", "SimHei", "Microsoft JhengHei", "Noto Sans CJK SC"]:
+        try:
+            font_manager.findfont(name, fallback_to_default=False)
+            plt.rcParams["font.sans-serif"] = [name] + list(plt.rcParams["font.sans-serif"])
+            break
+        except ValueError:
+            continue
+    plt.rcParams["axes.unicode_minus"] = False
+
+
 def set_seed(seed=42):
     """固定随机种子，保证实验可复现。"""
     random.seed(seed)

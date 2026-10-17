@@ -13,7 +13,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 
 from dataset import CLASSES, build_dataloaders
 from model import build_model
-from utils import ensure_dir, get_device, set_seed
+from utils import (ensure_dir, get_device, plot_confusion_matrix, set_seed)
 
 
 def parse_args():
@@ -68,6 +68,11 @@ def main():
     cm = confusion_matrix(y_true, y_pred)
     print("混淆矩阵（行=真实，列=预测）:")
     print(cm)
+
+    # 混淆矩阵落盘：原始计数 + 按行归一化（召回率视角）
+    plot_confusion_matrix(cm, CLASSES, os.path.join(fig_dir, "confusion_matrix.png"), normalize=False)
+    plot_confusion_matrix(cm, CLASSES, os.path.join(fig_dir, "confusion_matrix_norm.png"), normalize=True)
+    print("混淆矩阵图已保存至", fig_dir)
 
     report_path = os.path.join(args.output_dir, "logs", "test_report.txt")
     ensure_dir(os.path.dirname(report_path))

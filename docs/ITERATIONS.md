@@ -68,3 +68,28 @@ rolled-in_scale 0.968 / scratches 0.947。
 
 **改动文件**：`src/train.py`（调度器、权重衰减、强增强开关、实验配置落盘）、
 `src/dataset.py`（强增强算子、persistent_workers）。
+
+---
+
+## v1.2 —— 评估体系与可解释性完善
+
+**改动原因**：v1.1 之后准确率已接近上限（测试集只剩 1 个错例），此时"只会报一个准确率"
+不足以支撑交付，需要回答两个问题：错在哪儿、模型凭什么判断对。
+
+**改动**：
+
+1. `src/test.py`：混淆矩阵同时输出原始计数图与按行归一化图（召回率视角）；
+2. `scripts/visualize_predictions.py`：从测试集抽样 24 张，展示"真实类别 / 预测类别 / 置信度"，
+   判错标红、判对标绿；
+3. `scripts/grad_cam.py`：手写 Grad-CAM（不依赖第三方 CAM 库），对 b5 最后一层卷积做
+   前向取值 + 反向梯度加权，可视化模型判据所在区域；
+4. `src/utils.py`：补充 matplotlib 中文字体设置，避免图内标题乱码。
+
+**结果**：
+
+- 混淆矩阵（归一化）确认唯一错例：1 张 `patches` 被判为 `pitted_surface`，两类在纹理上确实高度相似；
+- 随机抽样 24 张的抽样准确率 23/24，与全量测试一致；
+- Grad-CAM 显示：划痕样本的高亮区正好覆盖纵向缺陷条带，斑块/氧化皮样本高亮区覆盖缺陷主体，
+  说明模型学到的判据集中在缺陷区域而非背景，预测具备可解释性。
+
+**改动文件**：`src/test.py`、`src/utils.py`、`scripts/visualize_predictions.py`、`scripts/grad_cam.py`。
