@@ -12,7 +12,7 @@ import torch
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from dataset import CLASSES, build_dataloaders
-from model import build_model
+from model import build_model, build_transfer_model
 from utils import (ensure_dir, get_device, plot_confusion_matrix, set_seed)
 
 
@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument("--img-size", type=int, default=224)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--arch", default="custom", choices=["custom", "resnet18"],
+                        help="与训练时保持一致")
     return parser.parse_args()
 
 
@@ -53,7 +55,11 @@ def main():
         args.data_root, img_size=args.img_size, batch_size=args.batch_size,
         num_workers=args.num_workers)
 
-    model = build_model(num_classes=len(CLASSES), in_channels=1, stem_kernel=7).to(device)
+    if args.arch == "custom":
+        model = build_model(num_classes=len(CLASSES), in_channels=1, stem_kernel=7)
+    else:
+        model = build_transfer_model(num_classes=len(CLASSES), in_channels=1, pretrained=False)
+    model = model.to(device)
     state = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(state)
 

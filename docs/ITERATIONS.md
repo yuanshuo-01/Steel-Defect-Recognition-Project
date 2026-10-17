@@ -93,3 +93,39 @@ rolled-in_scale 0.968 / scratches 0.947。
   说明模型学到的判据集中在缺陷区域而非背景，预测具备可解释性。
 
 **改动文件**：`src/test.py`、`src/utils.py`、`scripts/visualize_predictions.py`、`scripts/grad_cam.py`。
+
+---
+
+## v2.0 —— 对比实验：ImageNet 预训练 ResNet-18 微调 vs 手写 ResNet-18
+
+**改动原因**：验证手写 ResNet 的水平——与工业界常规做法（预训练 + 微调）相比差距多大，
+这本身就是一个有说服力的实验结论，也是本项目"迁移学习"学习内容的落地。
+
+**改动**：
+
+1. `src/model.py` 新增 `build_transfer_model`：加载 torchvision ImageNet 预训练 ResNet-18，
+   首层三通道卷积核沿通道维求和取均值压成单通道核（保留预训练滤波器信息），
+   分类头替换为 6 类；
+2. `src/train.py` 增加 `--arch {custom,resnet18}` 与 `--ckpt-name`，两条实验线共用同一套
+   数据管线与训练策略，保证对比公平；
+3. `src/test.py` 增加 `--arch`，评估时与训练时的结构保持一致。
+
+**实验设置**：预训练版微调 lr=1e-4（比从头训练小一个量级），30 epoch，其余与 v1.1 相同。
+
+| 指标 | 手写 ResNet-18（v1.1） | 预训练 ResNet-18 微调 |
+| --- | --- | --- |
+| 最优验证准确率 | 1.0000 | 1.0000 |
+| 测试准确率 | 0.9944（179/180） | **1.0000（180/180）** |
+| macro F1 | 0.9944 | 1.0000 |
+| 训练耗时 | 2m55s（40 epoch） | 4m10s（30 epoch） |
+| 从零训练参数 | 是 | ImageNet 预训练 |
+
+**结论**：
+
+1. 预训练微调在测试集上全对，验证集 loss 收敛到 0.0002（手写版 0.0117），小样本下
+   预训练特征仍有优势；
+2. 但手写版差距只有 1 张图（0.56 个百分点），说明针对灰度纹理任务、配合强增强与
+   余弦退火，从零训练的手写网络已经足够接近常规工业做法；
+3. 唯一错例是 `patches` ↔ `pitted_surface`，两类缺陷纹理本身高度相似，属于合理混淆。
+
+**改动文件**：`src/model.py`、`src/train.py`、`src/test.py`、`docs/ITERATIONS.md`。

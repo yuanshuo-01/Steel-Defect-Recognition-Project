@@ -112,6 +112,33 @@ def build_model(num_classes=6, in_channels=1, stem_kernel=7, dropout=0.0):
                     stem_kernel=stem_kernel, dropout=dropout)
 
 
+def build_transfer_model(num_classes=6, in_channels=1, pretrained=True):
+    """构建 torchvision 预训练 ResNet-18，用于与手写版做对比实验。
+
+    适配两处：
+    1. 输入通道：预训练模型首层是 RGB 三通道，缺陷图是单通道灰度。
+       这里把预训练的三通道卷积核沿通道维求和取均值，压成单通道核，
+       既保留了 ImageNet 预训练的滤波器信息，又匹配了输入格式。
+    2. 输出层：1000 类分类头替换为 6 类。
+    """
+    from torchvision import models
+
+    weights = models.ResNet18_Weights.DEFAULT if pretrained else None
+    net = models.resnet18(weights=weights)
+
+    if in_channels != 3:
+        old_conv = net.conv1
+        new_conv = nn.Conv2d(in_channels, old_conv.out_channels,
+                             kernel_size=old_conv.kernel_size, stride=old_conv.stride,
+                             padding=old_conv.padding, bias=False)
+        if pretrained:
+            new_conv.weight.data = old_conv.weight.data.sum(dim=1, keepdim=True) / 3.0
+        net.conv1 = new_conv
+
+    net.fc = nn.Linear(net.fc.in_features, num_classes)
+    return net
+
+
 if __name__ == "__main__":
     model = build_model()
     print(model)

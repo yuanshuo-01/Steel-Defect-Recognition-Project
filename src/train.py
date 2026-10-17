@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from dataset import CLASSES, build_dataloaders
-from model import build_model
+from model import build_model, build_transfer_model
 from utils import ensure_dir, get_device, plot_curves, set_seed
 
 
@@ -40,6 +40,9 @@ def parse_args():
     parser.add_argument("--scheduler", default="cosine", choices=["none", "step", "cosine"],
                         help="学习率调度策略")
     parser.add_argument("--strong-aug", action="store_true", help="启用强数据增强")
+    parser.add_argument("--arch", default="custom", choices=["custom", "resnet18"],
+                        help="custom=手写 ResNet-18；resnet18=torchvision 预训练模型")
+    parser.add_argument("--ckpt-name", default="best_model.pth", help="权重文件名")
     return parser.parse_args()
 
 
@@ -91,7 +94,11 @@ def main():
         args.data_root, img_size=args.img_size, batch_size=args.batch_size,
         num_workers=args.num_workers, strong_aug=args.strong_aug)
 
-    model = build_model(num_classes=len(CLASSES), in_channels=1, stem_kernel=7).to(device)
+    if args.arch == "custom":
+        model = build_model(num_classes=len(CLASSES), in_channels=1, stem_kernel=7)
+    else:
+        model = build_transfer_model(num_classes=len(CLASSES), in_channels=1, pretrained=True)
+    model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = build_scheduler(optimizer, args.scheduler, args.epochs)
     criterion = nn.CrossEntropyLoss()
@@ -127,7 +134,7 @@ def main():
             epoch + 1, args.epochs, train_loss, train_acc, val_loss, val_acc, lr_now))
 
     # 循环外统一保存最优权重：若放在循环内，会把权重回滚成历史最优，等于破坏训练
-    ckpt_path = os.path.join(ckpt_dir, "best_model.pth")
+    ckpt_path = os.path.join(ckpt_dir, args.ckpt_name)
     torch.save(best_state, ckpt_path)
     pd.DataFrame(history).to_csv(os.path.join(log_dir, "train_history.csv"), index=False)
     plot_curves(history, os.path.join(fig_dir, "train_curves.png"))
