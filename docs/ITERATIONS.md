@@ -39,3 +39,32 @@ rolled-in_scale 0.968 / scratches 0.947。
 1. 验证 loss 抖动剧烈（第 6 轮 5.14、第 15 轮 2.43、第 30 轮 1.44），固定学习率下训练不稳定；
 2. `pitted_surface` 召回仅 0.833，与 `inclusion` / `patches` 混淆；`scratches` 有 3 张被判成 `patches`；
 3. 每个 epoch 都要重建 4 个 DataLoader 子进程，单轮 45s 里相当一部分是数据加载开销。
+
+---
+
+## v1.1 —— 训练策略改进：余弦退火 + 强数据增强 + 权重衰减
+
+**改动原因**（对应 v1.0 暴露的三个问题）：
+
+1. 固定 lr=1e-3 时验证 loss 剧烈抖动（最高到 5.14），说明后期学习率过大 →
+   加入 `CosineAnnealingLR` 余弦退火，末期 lr 降到 1e-6；
+2. `pitted_surface` 召回偏低 → 加入强数据增强：旋转 ±15°、平移缩放、亮度对比度扰动、
+   高斯模糊（模拟工业现场的光照差异、拍摄角度与镜头失焦）；
+3. Adam 默认无正则 → 加 `weight_decay=1e-4`；
+4. 每个 epoch 重建 DataLoader 子进程开销巨大 → `persistent_workers=True` 复用 worker。
+
+**结果**（40 epoch，其余参数同 v1.0）：
+
+| 指标 | v1.0 | v1.1 |
+| --- | --- | --- |
+| 最优验证准确率 | 0.9778 | **1.0000** |
+| 测试准确率 | 0.9389 | **0.9944** |
+| macro F1 | 0.9383 | **0.9944** |
+| 训练耗时 | 36m13s | **2m55s** |
+
+- 验证 loss 从 1.44 降到 0.0117，训练过程稳定收敛；
+- 测试集 180 张仅错 1 张：`patches` → `pitted_surface`；
+- 训练耗时下降约 12 倍，主要来自 DataLoader worker 复用。
+
+**改动文件**：`src/train.py`（调度器、权重衰减、强增强开关、实验配置落盘）、
+`src/dataset.py`（强增强算子、persistent_workers）。

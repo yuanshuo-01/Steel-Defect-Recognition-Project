@@ -59,10 +59,13 @@ class SteelDefectDataset(Dataset):
             # 缺陷图像没有"上下左右"的语义约束，翻转与旋转都是安全的增强
             ops += [transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip()]
             if strong_aug:
+                # 强增强：轻微旋转/平移/缩放模拟拍摄差异，亮度对比度模拟光照变化，
+                # 高斯模糊模拟镜头失焦，都是工业现场常见的成像扰动
                 ops += [
                     transforms.RandomRotation(15),
                     transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
                     transforms.ColorJitter(brightness=0.2, contrast=0.2),
+                    transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 0.6)),
                 ]
         ops += [transforms.ToTensor(), transforms.Normalize(mean=NORM_MEAN, std=NORM_STD)]
         self.transform = transforms.Compose(ops)
@@ -80,15 +83,22 @@ class SteelDefectDataset(Dataset):
 
 
 def build_dataloaders(data_root, img_size=224, batch_size=32, num_workers=2, strong_aug=False):
-    """返回 train / val / test 三个 DataLoader。"""
+    """返回 train / val / test 三个 DataLoader。
+
+    Windows 下 DataLoader 每个 epoch 都会重建子进程，开销很大，
+    因此 train/val 复用同一批 worker（persistent_workers=True）。
+    """
     train_set = SteelDefectDataset(data_root, "train", img_size, train=True, strong_aug=strong_aug)
     val_set = SteelDefectDataset(data_root, "val", img_size, train=False)
     test_set = SteelDefectDataset(data_root, "test", img_size, train=False)
 
+    persistent = num_workers > 0
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=True, drop_last=False)
+                              num_workers=num_workers, pin_memory=True, drop_last=False,
+                              persistent_workers=persistent)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False,
-                            num_workers=num_workers, pin_memory=True)
+                            num_workers=num_workers, pin_memory=True,
+                            persistent_workers=persistent)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False,
                              num_workers=num_workers, pin_memory=True)
     return train_loader, val_loader, test_loader

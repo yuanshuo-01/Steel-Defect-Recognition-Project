@@ -11,6 +11,7 @@
 """
 
 import argparse
+import json
 import os
 import time
 
@@ -31,12 +32,24 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--img-size", type=int, default=224)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto", help="auto / cuda / cpu")
+    parser.add_argument("--scheduler", default="cosine", choices=["none", "step", "cosine"],
+                        help="学习率调度策略")
+    parser.add_argument("--strong-aug", action="store_true", help="启用强数据增强")
     return parser.parse_args()
+
+
+def build_scheduler(optimizer, name, epochs):
+    """按名称构造学习率调度器。"""
+    if name == "step":
+        return torch.optim.lr_scheduler.StepLR(optimizer, step_size=max(1, epochs // 3), gamma=0.1)
+    if name == "cosine":
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
+    return None
 
 
 def run_one_epoch(model, loader, criterion, optimizer, device, train=True):
@@ -76,14 +89,17 @@ def main():
 
     train_loader, val_loader, _ = build_dataloaders(
         args.data_root, img_size=args.img_size, batch_size=args.batch_size,
-        num_workers=args.num_workers)
+        num_workers=args.num_workers, strong_aug=args.strong_aug)
 
     model = build_model(num_classes=len(CLASSES), in_channels=1, stem_kernel=7).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scheduler = build_scheduler(optimizer, args.scheduler, args.epochs)
     criterion = nn.CrossEntropyLoss()
 
     print("device: {} | 类别数: {} | train: {} val: {}".format(
         device, len(CLASSES), len(train_loader.dataset), len(val_loader.dataset)))
+    print("scheduler: {} | weight decay: {} | strong aug: {}".format(
+        args.scheduler, args.weight_decay, args.strong_aug))
 
     history = {"epoch": [], "train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []}
     best_acc, best_state = 0.0, None
@@ -103,14 +119,22 @@ def main():
             best_acc = val_acc
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
-        print("Epoch {:>2}/{} | train loss {:.4f} acc {:.4f} | val loss {:.4f} acc {:.4f}".format(
-            epoch + 1, args.epochs, train_loss, train_acc, val_loss, val_acc))
+        if scheduler is not None:
+            scheduler.step()
+
+        lr_now = optimizer.param_groups[0]["lr"]
+        print("Epoch {:>2}/{} | train loss {:.4f} acc {:.4f} | val loss {:.4f} acc {:.4f} | lr {:.2e}".format(
+            epoch + 1, args.epochs, train_loss, train_acc, val_loss, val_acc, lr_now))
 
     # 循环外统一保存最优权重：若放在循环内，会把权重回滚成历史最优，等于破坏训练
     ckpt_path = os.path.join(ckpt_dir, "best_model.pth")
     torch.save(best_state, ckpt_path)
     pd.DataFrame(history).to_csv(os.path.join(log_dir, "train_history.csv"), index=False)
     plot_curves(history, os.path.join(fig_dir, "train_curves.png"))
+
+    # 记录本次实验配置，便于复现
+    with open(os.path.join(log_dir, "train_config.json"), "w", encoding="utf-8") as f:
+        json.dump(vars(args), f, ensure_ascii=False, indent=2)
 
     print("最优验证准确率: {:.4f}".format(best_acc))
     print("耗时 {:.0f}m{:.0f}s".format((time.time() - since) // 60, (time.time() - since) % 60))
