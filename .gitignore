@@ -1,0 +1,22 @@
+# 数据与训练产物（体积大 / 可再生，不进仓库）
+data/
+outputs/
+*.pth
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.log
+!docs/*.md

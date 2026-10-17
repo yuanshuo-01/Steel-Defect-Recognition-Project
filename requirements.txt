@@ -1,0 +1,9 @@
+# 开发环境实测版本（Anaconda envpytorch, Python 3.10.20）
+torch>=2.0
+torchvision>=0.15
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+scikit-learn>=1.3
+pillow>=10.0
+torchsummary>=1.5
